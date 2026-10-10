@@ -105,7 +105,7 @@ h3{font-size:17px}
 .row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);min-height:56px}
 .row:last-child{border-bottom:0}.row.tap{cursor:pointer}
 .rt{flex:1;min-width:0;display:flex;flex-direction:column}.rt small{color:var(--muted);font-size:13px}
-.qty{font-weight:700;white-space:nowrap}.chev{color:var(--muted);font-size:22px}
+.qty{font-weight:700;white-space:nowrap;text-align:right}.qty small.un{display:block;font-size:12px;font-weight:600;color:var(--muted)}.rt.tap,.qty.tap{cursor:pointer}.sec .cnt{font-size:13px;color:var(--muted);font-weight:600;margin-left:4px}.chev{color:var(--muted);font-size:22px}
 .row.done .rt b{text-decoration:line-through;color:var(--muted)}.row.done .qty{color:var(--muted)}
 .chk{width:30px;height:30px;border-radius:10px;border:2px solid var(--sage);flex:none;display:grid;place-items:center;background:var(--surface)}
 .chk svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:0}
@@ -254,7 +254,7 @@ const PREP_JANTAR=[T('Patê de atum','Misturar o atum, creme de ricota, orégano
  T('Hambúrguer','Considerar porção de carne + queijo + pão e consumir com bastante salada/vegetais. Opcional: ketchup, mostarda e maionese light.'),
  T('Pãozinho de cuscuz','Coloque a porção de flocão e hidrate com água até cobrir por 5 min, com uma pitada de sal. Depois, adicione um ovo, misture bem e leve ao microondas por 3 minutos. Então, pode rechear conforme orientações abaixo. Importante: escolha a substituição do pão pelo flocão, 1 ovo (1/2 porção de fonte de proteína), água e fermento; opcional adicionar a porção de queijo aqui. Depois de pronto, adicione o ovo adicional ou outra opção de fonte de proteína (1/2 porção, exemplo: 40g de frango desfiado ou carne moída).')];
 
-const SALADA=()=>it('Salada/vegetais','à vontade, no mínimo 150g');
+const SALADA=()=>it('Salada/vegetais','à vontade, no mínimo 150g',150,'g');
 const AZEITE=()=>it('Azeite de oliva','2 colheres de chá rasas (4g) · medir e adicionar ao prato pronto',4,'g',SUB_AZEITE);
 const ESPECIAL=(m)=>({id:m+'Esp',nome:'Refeição especial',especial:true,itens:[it('Refeição especial','até 600 kcal · 1 item com olhar treinado (bebida alcoólica controlada OU prato principal OU sobremesa)')],
  prep:[T('Como funciona','Substitui uma das refeições do cardápio até 2 vezes na semana, com algo que você goste em eventos sociais, selecionando 1 item por refeição com olhar treinado, somando até 600kcal. Mantenha a rotina normal independente do evento no dia. Exemplos: comida japonesa (15 peças ou 2 temakis); 1-2 fatias de pizza (evitando bordas recheadas); lanche sem adicional de maionese/bacon e cortes mais magros (evitar batata frita); risoto (2 colheres de servir, aproximadamente 1/4 do prato + fonte de proteína magra e legumes/salada); 1 taça de vinho/destilado/long neck de cerveja e manter a refeição conforme o plano alimentar.')]});
@@ -280,7 +280,7 @@ const PLAN_V1={
    {id:'cafe3',nome:'Opção 3',itens:[
      it('Pão de forma','2 fatias (50g)',2,'fatia',SUB_PAO50),
      it('Requeijão light','1 colher de sopa rasa (15g)',15,'g',SUB_REQ3),
-     it('Tomate/alface/rúcula/cenoura e etc.','à vontade, no mínimo 50g'),
+     it('Tomate/alface/rúcula/cenoura e etc.','à vontade, no mínimo 50g',50,'g'),
      it('Peito de frango desfiado','2,5 colheres de sopa cheias (50g)',50,'g',[SB('Atum em água','3,5 colheres de sopa cheias (70g)',70,'g')]),
      it('Maçã','1 unidade média (100g)',100,'g',FRUTAS)],prep:PREP_CAFE3},
    {id:'cafeImp',nome:'Imprevisto',itens:[
@@ -337,9 +337,43 @@ const diffDays=(a,b)=>Math.round((parseIso(b)-parseIso(a))/864e5);
 const fmtBR=iso=>{const [,m,d]=iso.split('-');return `${d}/${m}`};
 const slug=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
 /* Nomes que o plano escreve de formas diferentes mas são o mesmo item de compra */
-const ALIAS={'Goma de tapioca ou polvilho':'Goma de tapioca/polvilho','Queijo prato/muçarela':'Queijo muçarela/prato','Tilápia/merluza cozidas':'Tilápia/merluza cozida','Whey protein':'Whey protein concentrado','Requeijão light/cream cheese light':'Requeijão light'};
+const POOL_NOME='Salada e legumes (mínimo do plano)';
+const ALIAS={'Salada/vegetais':POOL_NOME,'Tomate/alface/rúcula/cenoura e etc.':POOL_NOME,'Goma de tapioca ou polvilho':'Goma de tapioca/polvilho','Queijo prato/muçarela':'Queijo muçarela/prato','Tilápia/merluza cozidas':'Tilápia/merluza cozida','Whey protein':'Whey protein concentrado','Requeijão light/cream cheese light':'Requeijão light'};
 const canon=n=>ALIAS[n]||n;
 const keyOf=(nome,u)=>slug(canon(nome))+'__'+u;
+const POOL_KEY=keyOf(POOL_NOME,'g'),POOL_SLUG=slug(POOL_NOME);
+
+/* categorias de compra (automáticas por nome; dá para trocar em cada item) */
+const CATS=['Verduras e legumes','Frutas','Carnes e ovos','Frios e laticínios','Padaria','Enlatados e conservas','Grãos e mercearia','Castanhas e frutas secas','Suplementos','Limpeza e higiene','Outros'];
+const noAcc=t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const CAT_RULES=[
+ ['Enlatados e conservas',/\b(atum|sardinha|palmito|azeitona|conserva)\b|(molho|extrato|polpa) de tomate/],
+ ['Suplementos',/\b(whey|creatina|colageno|bcaa)\b/],
+ ['Frios e laticínios',/\b(queijo|ricota|requeij|cottage|cream cheese|creme de|iogurte|leite|lactea|manteiga|presunto|blanquet|mortadela)|\b(peru|tofu|nata|kefir)\b/],
+ ['Carnes e ovos',/\b(frango|boi|porco|lombo|tilapia|merluza|salmao|sashimi|camarao|peixe|carne|bife|patinho|acem|file|ovos?|linguica|bacon|hamburguer)\b/],
+ ['Padaria',/\b(pao|paes|torrada|biscoito|bolo|tortilha|wrap|croissant|bisnaguinha|rosca)\b/],
+ ['Castanhas e frutas secas',/(castanha|amendoa|\bnoz\b|nozes|macadamia|avela|semente|\bchia\b|linhaca|amendoim|coco seco|damasco seco|tamara|figo seco|ameixa seca|uva passa)/],
+ ['Verduras e legumes',/\b(alface|rucula|agriao|couve|brocolis|espinafre|repolho|cenoura|chuchu|abobrinha|abobora|pepino|tomate|beterraba|pimentao|berinjela|vagem|cebola|alho|salsa|coentro|batata|mandioca|mandioquinha|baroa|inhame|salada|legumes?|vegetais|quiabo|rabanete|aspargo|cogumelo|champignon|milho cozido|cheiro verde)/],
+ ['Frutas',/\b(abacate|abacaxi|amora|ameixa|banana|caqui|cereja|goiaba|kiwi|laranja|limao|mamao|manga|maca|melancia|melao|mirtilo|morango|pera|pessego|maracuja|tangerina|mexerica|uva|fruta|acai|framboesa|pitaya)s?\b/],
+ ['Limpeza e higiene',/(papel higienico|sabao|detergente|desinfetante|shampoo|sabonete|creme dental|pasta de dente|esponja|amaciante|agua sanitaria|saco de lixo|papel toalha|guardanapo|condicionador|desodorante)/],
+ ['Grãos e mercearia',/\b(arroz|feijao|lentilha|grao|ervilha|soja|aveia|granola|macarrao|quinoa|cuscuz|farinha|goma|polvilho|azeite|oleo|cafe|acucar|sal|molho|vinagre|tempero|farelo|massa|cereal|tapioca)\b/]
+];
+function autoCat(nome){const t=noAcc(canon(nome));for(const [c,r] of CAT_RULES)if(r.test(t))return c;return 'Outros'}
+function catOf(nome){const c=S.d.cat&&S.d.cat[slug(canon(nome))];return CATS.includes(c)?c:autoCat(nome)}
+
+/* gramas por unidade: só o que o plano informa ("1 unidade média (80g)") ou o que vocês definirem */
+const GPU_PLAN=(()=>{const m={};const take=(nome,porcao,c)=>{if(!c||c.u!=='g')return;
+  const r=/^(½|\d+(?:,\d+)?)\s*unidades?\b[^()]*\((\d+(?:,\d+)?)\s*g\)/i.exec(porcao||'');if(!r)return;
+  const n=r[1]==='½'?0.5:parseFloat(r[1].replace(',','.')),g=parseFloat(r[2].replace(',','.'));
+  if(n>0&&g>0)m[slug(canon(nome))]=Math.round(g/n*10)/10};
+  for(const k in PLAN_V1.meals)for(const o of PLAN_V1.meals[k])for(const x of o.itens){take(x.nome,x.porcao,x.c);for(const y of x.sub)take(y.nome,y.porcao,y.c)}
+  return m})();
+const PLAN_KEYS=(()=>{const st=new Set();const add=(n,c)=>{if(c)st.add(slug(canon(n)))};
+  for(const k in PLAN_V1.meals)for(const o of PLAN_V1.meals[k])for(const x of o.itens){add(x.nome,x.c);for(const y of x.sub)add(y.nome,y.c)}return st})();
+function gpuOf(nome){const k=slug(canon(nome)),u=S.d.gpu&&Number(S.d.gpu[k]);return (u>0?u:null)||GPU_PLAN[k]||null}
+function unTxt(q,u,nome){if(u!=='g')return '';const g=gpuOf(nome);return g?'≈ '+Math.ceil(q/g-1e-9)+' un':''}
+const toGrams=v=>v.u==='g'?v.q:(v.u==='un'&&gpuOf(v.nome)?v.q*gpuOf(v.nome):0);
+const isLooseVeg=nome=>{const k=slug(canon(nome));return k!==POOL_SLUG&&!PLAN_KEYS.has(k)&&catOf(nome)==='Verduras e legumes'};
 const num=x=>String(Math.round(x*100)/100).replace('.',',');
 const UNIDADES={g:'g',ml:'ml',un:'un',fatia:'fatia(s)',lata:'lata(s)',kg:'kg',L:'L',pacote:'pacote(s)'};
 function fmtQty(q,u){
@@ -389,14 +423,17 @@ function calcNeeds(weeks,plans,only){
 
 /* 2) consolidar compras: necessidade - estoque (descontando o que já foi comprado nesta semana) */
 function buildShopping(needs,stock,buy){
-  const rows=Object.values(needs).map(n=>{
+  const all={...needs};
+  for(const k in buy){if(k.startsWith('e_')){const e=buy[k],key=k.slice(2);if(e&&e.q>0&&!all[key])all[key]={key,nome:e.nome,u:e.u,q:0}}}
+  const rows=Object.values(all).map(n=>{
+    const extra=(buy['e_'+n.key]&&buy['e_'+n.key].q)||0,need=n.q+extra;
     const est=(stock[n.key]&&stock[n.key].q)||0;
     const bought=(buy['b_'+n.key]&&buy['b_'+n.key].q)||0;
-    const base=Math.max(0,est-bought);          // estoque antes das compras desta semana
-    const toBuy=Math.max(0,n.q-base);
+    const base=Math.max(0,est-bought);          // estoque antes das compras
+    const toBuy=Math.max(0,need-base);
     let status='buy',falta=Math.max(0,toBuy-bought);
     if(bought>0&&falta<=EPS)status='bought'; else if(toBuy<=EPS)status='enough';
-    return {...n,est,base,toBuy,bought,falta,status};
+    return {...n,plan:n.q,extra,q:need,est,base,toBuy,bought,falta,status};
   });
   rows.sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
   return rows;
@@ -529,7 +566,7 @@ const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 const NOMES_PLANO={c:'carol',j:'julio'};
 
 const S={showBought:false,confirmDay:null,allWeeks:{},shopView:'casal',user:null,week:weekStartOf(new Date()),tab:'plan',day:0,sheet:null,menu:false,toast:null,ready:false,hist:{},
-  mes:{key:'',others:{}},d:{peso:{c:{},j:{}},cfg:{},plans:{},stock:{},meta:{},week:{},buy:{},dia:{c:{},j:{}},act:{c:{},j:{}},planv:{}}};
+  mes:{key:'',others:{}},d:{gpu:{},cat:{},peso:{c:{},j:{}},cfg:{},plans:{},stock:{},meta:{},week:{},buy:{},dia:{c:{},j:{}},act:{c:{},j:{}},planv:{}}};
 S.day=(()=>{const i=diffDays(S.week,today());return i>=0&&i<7?i:0})();
 {const u=lsGet('dm_user');if(u==='c'||u==='j')S.user=u}
 
@@ -558,6 +595,15 @@ function derive(){
   const r=calcNeeds(plannedWeeks().map(x=>x.doc),plansNow(),S.shopView==='c'||S.shopView==='j'?S.shopView:null);
   const rows=buildShopping(r.needs,S.d.stock,S.d.buy);
   const manual=Object.entries(S.d.buy).filter(([k,v])=>k.startsWith('x_')&&v).map(([k,v])=>({id:k.slice(2),...v}));
+  /* salada e legumes: o mínimo do plano é abatido pelo que há de legumes/verduras no estoque e na lista */
+  const pool=rows.find(x=>x.key===POOL_KEY);
+  if(pool){
+    let have=0,pend=0;
+    for(const v of Object.values(S.d.stock))if(v&&v.nome&&isLooseVeg(v.nome))have+=toGrams(v);
+    for(const x of manual)if(!x.done&&isLooseVeg(x.nome))pend+=toGrams(x);
+    Object.assign(pool,{pool:true,est:have,base:have,pend,bought:0,toBuy:Math.max(0,pool.q-have-pend)});
+    pool.falta=pool.toBuy;pool.status=pool.toBuy<=EPS?'enough':'buy';
+  }
   return {...r,rows,manual};
 }
 
@@ -573,6 +619,8 @@ function subscribeStatic(){
   sub('cfg','couple/cfg',d=>S.d.cfg=d);
   sub('stock','stock/main',d=>S.d.stock=d);
   sub('buy','buy/all',d=>S.d.buy=d);
+  sub('gpu','couple/gpu',d=>S.d.gpu=d);
+  sub('cat','couple/cat',d=>S.d.cat=d);
   if(!subs.allweeks)subs.allweeks={path:'week/',off:Store.subPrefix('week/',o=>{S.allWeeks=o;scheduleRender()})};
   sub('meta','couple/meta',d=>S.d.meta=d);
   sub('pesoc','peso/c',d=>S.d.peso.c=d);
@@ -667,11 +715,39 @@ const A={
     for(const m of MEALS){f[modeKey(d,m.id)]=null;for(const who of ['c','j']){f[slotKey(d,m.id,who)]=null;f[modeKey(d,m.id,who)]=null}}
     render();return guarded(async()=>{await putWeek(f);toast('Escolhas do dia removidas.')});
   },
+  buyEdit:({key})=>{S.sheet={t:'buyEdit',key};render()},
+  vegOpen:()=>{S.sheet={t:'veg'};render()},
+  buyEditSave:({key,clear})=>{
+    const r=derive().rows.find(x=>x.key===key);if(!r)return;
+    const par=v=>parseFloat(String(v||'').replace(',','.'));
+    let extra=clear?0:par($('f-extra').value);if(!(extra>0))extra=0;
+    const k=slug(canon(r.nome)),gIn=$('f-gpu')?par($('f-gpu').value):NaN;
+    const gNow=gIn>0?gIn:gpuOf(r.nome),eu=$('f-eu')?$('f-eu').value:r.u;
+    if(eu==='un'&&r.u==='g'&&extra>0){if(!gNow){toast('Informe o peso de 1 unidade (g) para comprar por unidade.');return}extra=extra*gNow}
+    const cat=$('f-cat')?$('f-cat').value:null;
+    S.sheet=null;render();
+    return guarded(async()=>{
+      await Store.put('buy/all',{['e_'+key]:extra>0?{nome:r.nome,u:r.u,q:round3(extra)}:null});
+      if($('f-gpu')||gIn>0)await Store.put('couple/gpu',{[k]:gIn>0&&gIn!==GPU_PLAN[k]?gIn:null});
+      if(cat)await Store.put('couple/cat',{[k]:cat===autoCat(r.nome)?null:cat});
+    });
+  },
+  vegAdd:()=>{
+    const par=v=>parseFloat(String(v||'').replace(',','.')),f={};let n=0;const t=Date.now();
+    for(const v of VEG_COMUNS){const q=par($('v-'+slug(v)).value);if(q>0){f['x_'+t.toString(36)+(n++)]={nome:v,q,u:'g',done:false}}}
+    const on=($('v-outro-n').value||'').trim(),oq=par($('v-outro-q').value);
+    if(on&&oq>0)f['x_'+t.toString(36)+(n++)]={nome:on,q:oq,u:'g',done:false};
+    const ex=par($('v-extra').value),cur=(S.d.buy['e_'+POOL_KEY]&&S.d.buy['e_'+POOL_KEY].q)||0,newEx=ex>0?ex:0;
+    if(newEx!==cur)f['e_'+POOL_KEY]=newEx>0?{nome:POOL_NOME,u:'g',q:newEx}:null;
+    if(!Object.keys(f).length){toast('Informe pelo menos uma quantidade.');return}
+    S.sheet=null;render();
+    return guarded(()=>Store.put('buy/all',f));
+  },
   showBought:()=>{S.showBought=!S.showBought;render()},
   clearSel:({d,m,who})=>guarded(()=>putWeek({[slotKey(d,m,who)]:null})),
   same:({d,m})=>{const c=getSel(d,m,'c');if(!c)return;const opt=findOption(getPlan('j'),m,c.opt);if(!opt){toast('A opção da Carol não existe no plano do Júlio.');return}return guarded(()=>putWeek({[slotKey(d,m,'j')]:{...c}}))},
   buyToggle:({key})=>{
-    const row=derive().rows.find(r=>r.key===key);if(!row)return;
+    const row=derive().rows.find(r=>r.key===key);if(!row||row.pool)return;
     const st=S.d.stock[key];
     return guarded(async()=>{
       if(row.status==='bought'){const r=undoPurchase(row,st);await Store.put('stock/main',{[key]:r.stock});await Store.put('buy/all',{['b_'+key]:r.buy})}
@@ -840,30 +916,37 @@ function chk(on,act,a,label){return `<button class="chk ${on?'on':''}" role="che
 function viewShop(){
   const D=derive(),buy=D.rows.filter(r=>r.status==='buy'),got=D.rows.filter(r=>r.status==='bought'),ok=D.rows.filter(r=>r.status==='enough');
   const manPend=D.manual.filter(x=>!x.done),manDone=D.manual.filter(x=>x.done);
-  const row=r=>`<li class="row ${r.status==='bought'?'done':''}">${chk(r.status==='bought','buyToggle',{key:r.key},r.nome)}
-   <div class="rt"><b>${esc(r.nome)}</b><small>precisa ${fmtQty(r.q,r.u)} · estoque ${fmtQty(r.est,r.u)}</small></div>
-   <span class="qty">${fmtQty(r.status==='bought'?r.bought:(r.bought>0?r.falta:r.toBuy),r.u)}</span></li>`;
-  const manRow=x=>`<li class="row ${x.done?'done':''}">${chk(x.done,'manualToggle',{id:x.id},x.nome)}<div class="rt"><b>${esc(x.nome)}</b><small>adicionado à mão</small></div><span class="qty">${fmtQty(x.q,x.u)}</span><button class="x" aria-label="Remover ${esc(x.nome)}" data-act="manualDel" data-id="${x.id}">×</button></li>`;
-  const man=manPend.map(manRow).join('');
+  const qty=(q,u,nome)=>{const t=unTxt(q,u,nome);return `${fmtQty(q,u)}${t?`<small class="un">${t}</small>`:''}`};
+  const edit=r=>`data-act="buyEdit" data-key="${esc(r.key)}"`;
+  const planTxt=r=>`precisa ${fmtQty(r.plan,r.u)}${r.extra?` + ${fmtQty(r.extra,r.u)} a mais`:''} · estoque ${fmtQty(r.est,r.u)}`;
+  const row=r=>{
+    if(r.pool)return `<li class="row"><div class="rt tap" data-act="vegOpen"><b>Salada e legumes</b><small>mínimo do plano ${fmtQty(r.plan,'g')}${r.extra?` + ${fmtQty(r.extra,'g')} a mais`:''} · em casa ${fmtQty(r.est,'g')} · na lista ${fmtQty(r.pend||0,'g')}</small></div><span class="qty">${fmtQty(r.toBuy,'g')}</span><button class="btn soft small" data-act="vegOpen">Escolher</button></li>`;
+    const q=r.status==='bought'?r.bought:(r.bought>0?r.falta:r.toBuy);
+    return `<li class="row ${r.status==='bought'?'done':''}">${chk(r.status==='bought','buyToggle',{key:r.key},r.nome)}
+   <div class="rt tap" ${edit(r)}><b>${esc(r.nome)}</b><small>${planTxt(r)}</small></div>
+   <span class="qty tap" ${edit(r)}>${qty(q,r.u,r.nome)}</span></li>`};
+  const manRow=x=>`<li class="row ${x.done?'done':''}">${chk(x.done,'manualToggle',{id:x.id},x.nome)}<div class="rt"><b>${esc(x.nome)}</b><small>adicionado à mão</small></div><span class="qty">${qty(x.q,x.u,x.nome)}</span><button class="x" aria-label="Remover ${esc(x.nome)}" data-act="manualDel" data-id="${x.id}">×</button></li>`;
+  const itens=[...buy.map(r=>({cat:r.pool?'Verduras e legumes':catOf(r.nome),nome:r.pool?'':r.nome,html:row(r)})),...manPend.map(x=>({cat:catOf(x.nome),nome:x.nome,html:manRow(x)}))];
+  const grupos=CATS.map(c=>({c,l:itens.filter(i=>i.cat===c).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'))})).filter(g=>g.l.length)
+    .map(g=>`<h3 class="sec">${g.c} <span class="cnt">${g.l.length}</span></h3><ul class="list card">${g.l.map(i=>i.html).join('')}</ul>`).join('');
   const nGot=got.length+manDone.length;
   const vazio=!D.rows.length&&!D.manual.length;
-  const todoFeito=!vazio&&!buy.length&&!manPend.length;
+  const todoFeito=!vazio&&!itens.length;
   const pw=plannedWeeks().filter(x=>Object.keys(x.doc||{}).some(k=>k[0]==='s'));
   const de=pw.length?fmtBR(pw[0].w):fmtBR(weekStartOf(new Date()));
   const vsel=`<div class="seg vsel" role="group" aria-label="Visão da lista">${[['casal','Casal'],['c','Carol'],['j','Júlio']].map(([v,l])=>`<button class="${S.shopView===v?'on':''}" data-act="shopView" data-v="${v}">${l}</button>`).join('')}</div>`;
-  return `<h2 class="title">Compras</h2><p class="muted">Soma de tudo que está planejado a partir da semana de ${de}${pw.length>1?` (${pw.length} semanas)`:''}.</p>${vsel}
-  <div class="summary card"><div><b>${buy.length+manPend.length}</b><span>para comprar</span></div><div><b>${D.cook}</b><span>para cozinhar</span></div><div><b>${D.order}</b><span>para pedir</span></div></div>
+  return `<h2 class="title">Compras</h2><p class="muted">Soma de tudo que está planejado a partir da semana de ${de}${pw.length>1?` (${pw.length} semanas)`:''}. Toque num item para comprar a mais ou mudar a categoria.</p>${vsel}
+  <div class="summary card"><div><b>${itens.length}</b><span>para comprar</span></div><div><b>${D.cook}</b><span>para cozinhar</span></div><div><b>${D.order}</b><span>para pedir</span></div></div>
   <button class="btn primary wide" data-act="addBuyOpen">+ Adicionar item</button>
   ${vazio?'<div class="empty card"><b>Nenhum ingrediente ainda</b><p>Escolha refeições em Planejar e marque como Cozinhar. A lista é montada por ingrediente.</p></div>':''}
   ${todoFeito?'<div class="empty card"><b>Tudo comprado</b><p>Não falta nada para o que está planejado.</p></div>':''}
-  ${buy.length?`<h3 class="sec">Para comprar</h3><ul class="list card">${buy.map(row).join('')}</ul>`:''}
-  ${man?`<h3 class="sec">Adicionados à mão</h3><ul class="list card">${man}</ul>`:''}
+  ${grupos}
   ${nGot?`<button class="link" data-act="showBought">${S.showBought?'Esconder comprados':`Mostrar comprados (${nGot})`}</button>`:''}
   ${S.showBought&&nGot?`<h3 class="sec">Comprados</h3><ul class="list card">${got.map(row).join('')}${manDone.map(manRow).join('')}</ul>`:''}
-  ${ok.length?`<details class="card okbox"><summary>${ok.length} ${ok.length===1?'item com estoque suficiente':'itens com estoque suficiente'}</summary><ul class="list">${ok.map(r=>`<li class="row"><span class="tick">✓</span><div class="rt"><b>${esc(r.nome)}</b><small>precisa ${fmtQty(r.q,r.u)} · estoque ${fmtQty(r.est,r.u)}</small></div></li>`).join('')}</ul></details>`:''}
-  <p class="foot">${S.shopView==='casal'?'Lista do casal: soma o que Carol e Júlio vão cozinhar.':`Visão só de ${nomeDe(S.shopView)}: mostra apenas o que ${nomeDe(S.shopView)} vai cozinhar. Estoque e compras marcadas continuam compartilhados.`} Quantidades em gramas, mililitros ou unidades, como no plano (alimentos já preparados, por exemplo arroz cozido). Salada, momento doce e refeição especial não entram sozinhos: use + Adicionar item.</p>`;
+  ${ok.length?`<details class="card okbox"><summary>${ok.length} ${ok.length===1?'item com estoque suficiente':'itens com estoque suficiente'}</summary><ul class="list">${ok.map(r=>`<li class="row"><span class="tick">✓</span><div class="rt tap" ${r.pool?'data-act="vegOpen"':edit(r)}><b>${esc(r.pool?'Salada e legumes':r.nome)}</b><small>${r.pool?`mínimo do plano ${fmtQty(r.q,'g')} · em casa ${fmtQty(r.est,'g')} · na lista ${fmtQty(r.pend||0,'g')}`:`precisa ${fmtQty(r.q,r.u)} · estoque ${fmtQty(r.est,r.u)}`}</small></div></li>`).join('')}</ul></details>`:''}
+  <p class="foot">${S.shopView==='casal'?'Lista do casal: soma o que Carol e Júlio vão cozinhar.':`Visão só de ${nomeDe(S.shopView)}: mostra apenas o que ${nomeDe(S.shopView)} vai cozinhar. Estoque e compras marcadas continuam compartilhados.`} Quantidades em gramas, mililitros ou unidades, como no plano (alimentos já preparados, por exemplo arroz cozido). O "≈ un" usa o peso da unidade que o plano informa, ou o que vocês definirem ao tocar no item. Salada e legumes usam o mínimo do plano. Momento doce e refeição especial não entram sozinhos: use + Adicionar item.</p>`;
 }
-const PRODUTOS=(()=>{const s=new Set();for(const k in PLAN_V1.meals)for(const o of PLAN_V1.meals[k])for(const x of o.itens){if(x.c)s.add(x.nome);for(const y of x.sub)s.add(y.nome)}return [...s].sort((a,b)=>a.localeCompare(b,'pt-BR'))})();
+const PRODUTOS=(()=>{const s=new Set();for(const k in PLAN_V1.meals)for(const o of PLAN_V1.meals[k])for(const x of o.itens){if(x.c&&canon(x.nome)!==POOL_NOME)s.add(canon(x.nome));for(const y of x.sub)s.add(canon(y.nome))}return [...s].sort((a,b)=>a.localeCompare(b,'pt-BR'))})();
 const unitOpts=sel=>['g','kg','ml','L','un','fatia','lata','pacote'].map(u=>`<option value="${u}" ${u===sel?'selected':''}>${UNIDADES[u]}</option>`).join('');
 function formItem(titulo,nome,q,u,btn,extra){
   return `<h3>${titulo}</h3><datalist id="produtos">${PRODUTOS.map(p=>`<option value="${esc(p)}">`).join('')}</datalist>
@@ -879,6 +962,30 @@ function viewStock(){
   return `<h2 class="title">Estoque</h2><p class="muted">Compartilhado entre Carol e Júlio. Marcar uma compra soma aqui.</p>
   <button class="btn primary wide" data-act="stockOpen">+ Adicionar produto</button>
   ${it2.length?`<ul class="list card">${it2.map(([k,v])=>`<li class="row tap" data-act="stockOpen" data-key="${k}"><div class="rt"><b>${esc(v.nome)}</b></div><span class="qty">${fmtQty(v.q,v.u)}</span><span class="chev">›</span></li>`).join('')}</ul>`:'<div class="empty card"><b>Estoque vazio</b><p>Adicione o que já tem em casa. Ele é descontado da lista de compras.</p></div>'}`;
+}
+const VEG_COMUNS=['Cenoura','Chuchu','Alface','Rúcula','Brócolis','Couve-flor','Tomate'];
+function sheetBuyEdit(sh){
+  const r=derive().rows.find(x=>x.key===sh.key);if(!r)return '<h3>Item</h3><p class="muted">Não encontrei este item na lista.</p>';
+  const own=S.d.gpu&&S.d.gpu[slug(canon(r.nome))],g=gpuOf(r.nome),cat=catOf(r.nome);
+  const un=r.u==='g'?`<option value="g">g</option><option value="un">un</option>`:`<option value="${esc(r.u)}">${esc(UNIDADES[r.u]||r.u)}</option>`;
+  return `<h3>${esc(r.pool?'Salada e legumes':r.nome)}</h3>
+  <p class="muted">Plano: ${fmtQty(r.plan,r.u)} · estoque: ${fmtQty(r.est,r.u)}${r.extra?` · a mais: ${fmtQty(r.extra,r.u)}`:''}</p>
+  <div class="two"><label class="fl">Comprar a mais<input id="f-extra" inputmode="decimal" value="${r.extra?num(r.extra):''}" placeholder="0"></label>
+  <label class="fl">Unidade<select id="f-eu">${un}</select></label></div>
+  ${r.u==='g'&&!r.pool?`<label class="fl">Peso de 1 unidade, em g (opcional)<input id="f-gpu" inputmode="decimal" value="${own?num(own):(g?num(g):'')}" placeholder="ex.: 80"></label>`:''}
+  ${r.pool?'':`<label class="fl">Categoria<select id="f-cat">${CATS.map(c=>`<option ${c===cat?'selected':''}>${c}</option>`).join('')}</select></label>`}
+  <button class="btn primary wide" data-act="buyEditSave" data-key="${esc(r.key)}">Salvar</button>
+  ${r.extra?`<button class="btn ghost wide" data-act="buyEditSave" data-key="${esc(r.key)}" data-clear="1">Tirar o extra</button>`:''}`;
+}
+function sheetVeg(){
+  const p=derive().rows.find(x=>x.key===POOL_KEY);if(!p)return '<h3>Salada e legumes</h3><p class="muted">Nenhuma refeição com salada está planejada.</p>';
+  return `<h3>Salada e legumes</h3>
+  <p class="muted">O plano pede no mínimo ${fmtQty(p.plan,'g')} (à vontade). Em casa: ${fmtQty(p.est,'g')} · já na lista: ${fmtQty(p.pend||0,'g')} · falta escolher: ${fmtQty(p.toBuy,'g')}.</p>
+  <p class="muted small">O que está no Estoque (cenoura, alface, chuchu…) em gramas abate sozinho. Escolha abaixo o que comprar, em gramas.</p>
+  <div class="two">${VEG_COMUNS.map(v=>`<label class="fl">${v}<input id="v-${slug(v)}" inputmode="decimal" placeholder="g"></label>`).join('')}</div>
+  <div class="two"><label class="fl">Outro legume<input id="v-outro-n" placeholder="Nome" autocomplete="off"></label><label class="fl">Gramas<input id="v-outro-q" inputmode="decimal" placeholder="g"></label></div>
+  <label class="fl">Comprar a mais, em g (opcional)<input id="v-extra" inputmode="decimal" value="${p.extra?num(p.extra):''}" placeholder="0"></label>
+  <button class="btn primary wide" data-act="vegAdd">Adicionar à lista</button>`;
 }
 function sheetStock(sh){
   const v=sh.key?S.d.stock[sh.key]:null;
@@ -989,7 +1096,7 @@ function viewShell(){
   const v={plan:viewPlan,shop:viewShop,stock:viewStock,diary:viewDiary,score:viewScore,cfg:viewCfg}[S.tab]();
   const sh=S.sheet;let sheet='';
   if(sh){
-    const body={opt:sheetOpt,subs:sheetSubs,addBuy:()=>formItem('Adicionar item','','','un','addBuySave'),stock:sheetStock,act:sheetAct,peso:sheetPeso,
+    const body={opt:sheetOpt,subs:sheetSubs,addBuy:()=>formItem('Adicionar item','','','un','addBuySave'),stock:sheetStock,buyEdit:sheetBuyEdit,veg:sheetVeg,act:sheetAct,peso:sheetPeso,
       demo:()=>`<h3>Limpar dados de exemplo?</h3><p class="muted">Remove os documentos de exemplo de planejamento, estoque, diário e atividades. O que vocês registraram nessas mesmas semanas também será removido.</p><button class="btn danger wide" data-act="demoClearGo">Limpar</button><button class="btn ghost wide" data-act="close">Cancelar</button>`}[sh.t](sh);
     sheet=`<div class="scrim" data-act="close"></div><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div><button class="close" data-act="close" aria-label="Fechar">×</button><div class="sbody">${body}</div></div>`;
   }
