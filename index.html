@@ -59,7 +59,7 @@ h3{font-size:17px}
 .day b{font-size:17px;color:var(--ink);font-family:var(--disp)}
 .day.on{background:var(--olive);border-color:var(--olive);color:var(--olive-ink)}.day.on b{color:var(--olive-ink)}
 .day.today::after{content:'';position:absolute;bottom:4px;width:5px;height:5px;border-radius:50%;background:var(--terra)}
-.dayh{font-size:20px;margin:14px 4px 0}
+.dayh{font-size:20px;margin:14px 4px 0}.dayhrow{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;margin-top:6px}.dayhrow .dayh{margin-bottom:0}.btn.small{min-height:40px;padding:0 14px;font-size:14px}
 /* refeição */
 .meal-h{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .pname-row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}.pname-row .pname{margin:0}.vsel{display:flex;margin:4px 0 10px}.vsel button{flex:1}
@@ -336,7 +336,10 @@ const weekStartOf=d=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate())
 const diffDays=(a,b)=>Math.round((parseIso(b)-parseIso(a))/864e5);
 const fmtBR=iso=>{const [,m,d]=iso.split('-');return `${d}/${m}`};
 const slug=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
-const keyOf=(nome,u)=>slug(nome)+'__'+u;
+/* Nomes que o plano escreve de formas diferentes mas são o mesmo item de compra */
+const ALIAS={'Goma de tapioca ou polvilho':'Goma de tapioca/polvilho','Queijo prato/muçarela':'Queijo muçarela/prato','Tilápia/merluza cozidas':'Tilápia/merluza cozida','Whey protein':'Whey protein concentrado','Requeijão light/cream cheese light':'Requeijão light'};
+const canon=n=>ALIAS[n]||n;
+const keyOf=(nome,u)=>slug(canon(nome))+'__'+u;
 const num=x=>String(Math.round(x*100)/100).replace('.',',');
 const UNIDADES={g:'g',ml:'ml',un:'un',fatia:'fatia(s)',lata:'lata(s)',kg:'kg',L:'L',pacote:'pacote(s)'};
 function fmtQty(q,u){
@@ -363,9 +366,9 @@ function effectiveItems(plan,mealId,sel){
 const especialCount=(week,who)=>{let n=0;for(let d=0;d<7;d++)for(const m of MEALS){const s=week[slotKey(d,m.id,who)];if(s&&/Esp$/.test(s.opt||''))n++}return n};
 
 /* 1) calcular planejamento -> necessidades consolidadas por ingrediente */
-function calcNeeds(week,plans,only){
+function calcNeeds(weeks,plans,only){
   const acc={};let cook=0,order=0,vazio=0;
-  for(let d=0;d<7;d++)for(const m of MEALS){
+  for(const week of weeks)for(let d=0;d<7;d++)for(const m of MEALS){
     let any=false;
     for(const who of ['c','j']){
       if(only&&who!==only)continue;
@@ -375,8 +378,8 @@ function calcNeeds(week,plans,only){
       if(mode!=='cook')continue;
       for(const x of effectiveItems(plans[who],m.id,sel)){
         if(!x.c)continue;
-        const k=keyOf(x.nome,x.c.u);
-        (acc[k]=acc[k]||{key:k,nome:x.nome,u:x.c.u,q:0}).q+=x.c.q;
+        const nome=canon(x.nome),k=keyOf(nome,x.c.u);
+        (acc[k]=acc[k]||{key:k,nome,u:x.c.u,q:0}).q+=x.c.q;
       }
     }
     if(!any)vazio++;
@@ -452,17 +455,20 @@ const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
    então o merge raso do banco (data || novo) substitui o campo inteiro. */
 const Store=(()=>{
   let mode='local',canWrite=true,timer=null,busy=false;
-  const mem={},listeners={},queues={},subs={};
+  const mem={},listeners={},queues={},subs={},psubs={},plisteners={};
   const enc=v=>JSON.stringify(v===undefined?null:v);
   const decDoc=raw=>{if(!raw)return {};const o={};for(const k in raw){const v=raw[k];if(typeof v==='string'){try{o[k]=JSON.parse(v)}catch(e){o[k]=v}}else o[k]=v}for(const k in o)if(o[k]===null)delete o[k];return o};
   const queue=(path,fn)=>{const p=(queues[path]||Promise.resolve()).catch(()=>{}).then(fn);queues[path]=p;return p};
-  const notify=p=>(listeners[p]||[]).forEach(f=>f({...(mem[p]||{})}));
+  const snapPrefix=pre=>{const o={};for(const p in mem)if(p.startsWith(pre))o[p]={...mem[p]};return o};
+  const notify=p=>{(listeners[p]||[]).forEach(f=>f({...(mem[p]||{})}));for(const pre in plisteners)if(p.startsWith(pre))plisteners[pre].forEach(f=>f(snapPrefix(pre)))};
   const H=()=>{const h={apikey:SUPABASE_KEY,'Content-Type':'application/json'};if(SUPABASE_KEY.startsWith('eyJ'))h.Authorization='Bearer '+SUPABASE_KEY;return h};
   const api=async(path,opt={})=>{const r=await fetch(SUPABASE_URL.replace(/\/$/,'')+'/rest/v1/'+path,{...opt,headers:{...H(),...(opt.headers||{})}});if(!r.ok){if(r.status===401||r.status===403)canWrite=false;const e=new Error('http '+r.status);e.code=r.status;throw e}return r.status===204?null:r.json().catch(()=>null)};
   const inList=ps=>'('+ps.map(p=>'"'+p.replace(/"/g,'')+'"').join(',')+')';
   async function poll(){
-    const ps=Object.keys(subs);if(!ps.length||busy)return;busy=true;
+    const ps=Object.keys(subs),pres=Object.keys(psubs);if((!ps.length&&!pres.length)||busy)return;busy=true;
     try{
+      for(const pre of pres){const rows=await api('docs?select=path,data&path=like.'+encodeURIComponent(pre+'*'));const o={};(rows||[]).forEach(r=>o[r.path]=decDoc(r.data));const sig=JSON.stringify(rows||[]),s2=psubs[pre];if(s2&&s2.sig!==sig){s2.sig=sig;s2.cbs.forEach(f=>f(o))}}
+      if(!ps.length){busy=false;return}
       const rows=await api('docs?select=path,data&path=in.'+encodeURIComponent(inList(ps)));
       const by={};(rows||[]).forEach(r=>by[r.path]=r.data);
       ps.forEach(p=>{const sig=JSON.stringify(by[p]||null),s=subs[p];if(s&&s.sig!==sig){s.sig=sig;s.cbs.forEach(f=>f(decDoc(by[p])))}});
@@ -489,8 +495,17 @@ const Store=(()=>{
       (listeners[path]=listeners[path]||[]).push(cb);setTimeout(()=>cb({...(mem[path]||{})}),0);
       return ()=>{listeners[path]=(listeners[path]||[]).filter(f=>f!==cb)};
     },
+    subPrefix(pre,cb){
+      if(mode==='shared'){
+        const s2=psubs[pre]=psubs[pre]||{cbs:[],sig:undefined};s2.cbs.push(cb);
+        setTimeout(poll,0);
+        return ()=>{const x=psubs[pre];if(!x)return;x.cbs=x.cbs.filter(f=>f!==cb);if(!x.cbs.length)delete psubs[pre]};
+      }
+      (plisteners[pre]=plisteners[pre]||[]).push(cb);setTimeout(()=>cb(snapPrefix(pre)),0);
+      return ()=>{plisteners[pre]=(plisteners[pre]||[]).filter(f=>f!==cb)};
+    },
     async get(path){
-      if(mode==='shared'){const r=await api('docs?select=data&path=eq.'+encodeURIComponent('"'+path+'"'));return r&&r[0]?decDoc(r[0].data):{}}
+      if(mode==='shared'){const r=await api('docs?select=data&path=in.'+encodeURIComponent(inList([path])));return r&&r[0]?decDoc(r[0].data):{}}
       return {...(mem[path]||{})};
     },
     put(path,fields){
@@ -502,7 +517,7 @@ const Store=(()=>{
         }else{mem[path]=mem[path]||{};for(const k in fields){if(fields[k]===null)delete mem[path][k];else mem[path][k]=fields[k]}notify(path)}
       });
     },
-    del(path){return queue(path,async()=>{if(mode==='shared'){await api('docs?path=eq.'+encodeURIComponent('"'+path+'"'),{method:'DELETE'});poll()}else{delete mem[path];notify(path)}})}
+    del(path){return queue(path,async()=>{if(mode==='shared'){await api('docs?path=in.'+encodeURIComponent(inList([path])),{method:'DELETE'});poll()}else{delete mem[path];notify(path)}})}
   };
 })();
 /* ============ 4. ESTADO DO USUÁRIO E DO APP ============ */
@@ -513,7 +528,7 @@ const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 const NOMES_PLANO={c:'carol',j:'julio'};
 
-const S={shopView:'casal',user:null,week:weekStartOf(new Date()),tab:'plan',day:0,sheet:null,menu:false,toast:null,ready:false,hist:{},
+const S={showBought:false,confirmDay:null,allWeeks:{},shopView:'casal',user:null,week:weekStartOf(new Date()),tab:'plan',day:0,sheet:null,menu:false,toast:null,ready:false,hist:{},
   mes:{key:'',others:{}},d:{peso:{c:{},j:{}},cfg:{},plans:{},stock:{},meta:{},week:{},buy:{},dia:{c:{},j:{}},act:{c:{},j:{}},planv:{}}};
 S.day=(()=>{const i=diffDays(S.week,today());return i>=0&&i<7?i:0})();
 {const u=lsGet('dm_user');if(u==='c'||u==='j')S.user=u}
@@ -532,8 +547,15 @@ function getPlan(who){
   return pv&&pv.data?pv.data:PLAN_V1;
 }
 const plansNow=()=>({c:getPlan('c'),j:getPlan('j')});
+/* semanas planejadas, da semana atual em diante (a visualizada usa o dado mais recente) */
+function plannedWeeks(){
+  const from=weekStartOf(new Date()),out=[];
+  for(const [p,doc] of Object.entries(S.allWeeks)){const w=p.slice(5);if(w>=from)out.push({w,doc:w===S.week?S.d.week:doc})}
+  if(S.week>=from&&!out.some(x=>x.w===S.week))out.push({w:S.week,doc:S.d.week});
+  return out.sort((a,b)=>a.w<b.w?-1:1);
+}
 function derive(){
-  const r=calcNeeds(S.d.week,plansNow(),S.shopView==='c'||S.shopView==='j'?S.shopView:null);
+  const r=calcNeeds(plannedWeeks().map(x=>x.doc),plansNow(),S.shopView==='c'||S.shopView==='j'?S.shopView:null);
   const rows=buildShopping(r.needs,S.d.stock,S.d.buy);
   const manual=Object.entries(S.d.buy).filter(([k,v])=>k.startsWith('x_')&&v).map(([k,v])=>({id:k.slice(2),...v}));
   return {...r,rows,manual};
@@ -550,6 +572,8 @@ function sub(key,path,assign){
 function subscribeStatic(){
   sub('cfg','couple/cfg',d=>S.d.cfg=d);
   sub('stock','stock/main',d=>S.d.stock=d);
+  sub('buy','buy/all',d=>S.d.buy=d);
+  if(!subs.allweeks)subs.allweeks={path:'week/',off:Store.subPrefix('week/',o=>{S.allWeeks=o;scheduleRender()})};
   sub('meta','couple/meta',d=>S.d.meta=d);
   sub('pesoc','peso/c',d=>S.d.peso.c=d);
   sub('pesoj','peso/j',d=>S.d.peso.j=d);
@@ -564,7 +588,6 @@ function subscribePlanVersions(){
 function subscribeWeek(){
   const w=S.week;
   sub('week','week/'+w,d=>S.d.week=d);
-  sub('buy','buy/'+w,d=>S.d.buy=d);
   for(const p of ['c','j']){sub('dia'+p,`dia/${p}-${w}`,d=>S.d.dia[p]=d);sub('act'+p,`act/${p}-${w}`,d=>S.d.act[p]=d)}
 }
 async function loadMonth(){
@@ -637,14 +660,22 @@ const A={
     return guarded(()=>putWeek({[slotKey(d,m,who)]:{...sel,subs:ns}}));
   },
   doce:({d,m,who})=>{const sel=getSel(d,m,who);if(sel)return guarded(()=>putWeek({[slotKey(d,m,who)]:{...sel,doce:!sel.doce}}))},
+  clearDay:({d})=>{
+    d=Number(d);
+    if(S.confirmDay!==d){S.confirmDay=d;render();clearTimeout(A.clearDay.t);A.clearDay.t=setTimeout(()=>{if(S.confirmDay===d){S.confirmDay=null;render()}},4000);return}
+    S.confirmDay=null;const f={};
+    for(const m of MEALS){f[modeKey(d,m.id)]=null;for(const who of ['c','j']){f[slotKey(d,m.id,who)]=null;f[modeKey(d,m.id,who)]=null}}
+    render();return guarded(async()=>{await putWeek(f);toast('Escolhas do dia removidas.')});
+  },
+  showBought:()=>{S.showBought=!S.showBought;render()},
   clearSel:({d,m,who})=>guarded(()=>putWeek({[slotKey(d,m,who)]:null})),
   same:({d,m})=>{const c=getSel(d,m,'c');if(!c)return;const opt=findOption(getPlan('j'),m,c.opt);if(!opt){toast('A opção da Carol não existe no plano do Júlio.');return}return guarded(()=>putWeek({[slotKey(d,m,'j')]:{...c}}))},
   buyToggle:({key})=>{
     const row=derive().rows.find(r=>r.key===key);if(!row)return;
     const st=S.d.stock[key];
     return guarded(async()=>{
-      if(row.status==='bought'){const r=undoPurchase(row,st);await Store.put('stock/main',{[key]:r.stock});await Store.put('buy/'+S.week,{['b_'+key]:r.buy})}
-      else if(row.status==='buy'){const r=applyPurchase(row,st);await Store.put('stock/main',{[key]:r.stock});await Store.put('buy/'+S.week,{['b_'+key]:r.buy})}
+      if(row.status==='bought'){const r=undoPurchase(row,st);await Store.put('stock/main',{[key]:r.stock});await Store.put('buy/all',{['b_'+key]:r.buy})}
+      else if(row.status==='buy'){const r=applyPurchase(row,st);await Store.put('stock/main',{[key]:r.stock});await Store.put('buy/all',{['b_'+key]:r.buy})}
     });
   },
   manualToggle:({id})=>{
@@ -652,17 +683,17 @@ const A={
     return guarded(async()=>{
       const q=round3(Math.max(0,st.q+(x.done?-x.q:x.q)));
       await Store.put('stock/main',{[key]:{...st,nome:x.nome,u:x.u,q}});
-      await Store.put('buy/'+S.week,{['x_'+id]:{...x,done:!x.done,by:S.user}});
+      await Store.put('buy/all',{['x_'+id]:{...x,done:!x.done,by:S.user}});
     });
   },
-  manualDel:({id})=>guarded(()=>Store.put('buy/'+S.week,{['x_'+id]:null})),
+  manualDel:({id})=>guarded(()=>Store.put('buy/all',{['x_'+id]:null})),
   addBuyOpen:()=>{S.sheet={t:'addBuy'};render()},
   addBuySave:()=>{
     const nome=$('f-nome').value.trim(),q=parseFloat(($('f-q').value||'').replace(',','.')),u0=$('f-u').value;
     if(!nome||!(q>0)){toast('Informe o produto e uma quantidade maior que zero.');return}
     const {q:qq,u}=normUnit(q,u0);const id=Date.now().toString(36);
     S.sheet=null;render();
-    return guarded(()=>Store.put('buy/'+S.week,{['x_'+id]:{nome,q:qq,u,done:false}}));
+    return guarded(()=>Store.put('buy/all',{['x_'+id]:{nome,q:qq,u,done:false}}));
   },
   stockOpen:({key})=>{S.sheet={t:'stock',key:key||null};render()},
   stockSave:()=>{
@@ -773,7 +804,9 @@ function viewPlan(){
     ${personBlock(d,m,'c',getMode(S.d.week,d,m.id,'c'))}${personBlock(d,m,'j',getMode(S.d.week,d,m.id,'j'))}</section>`).join('');
   const esp=['c','j'].map(w=>({w,n:especialCount(S.d.week,w)})).filter(x=>x.n>0);
   const lim=PLAN_V1.especialLimite;
-  return `${weekBar()}${dayStrip()}<h2 class="dayh">${DIAS[d]}, ${fmtBR(addDays(S.week,d))}</h2>${cards}
+  const temDia=MEALS.some(m=>['c','j'].some(w=>getSel(d,m.id,w)));
+  const cd=S.confirmDay===d;
+  return `${weekBar()}${dayStrip()}<div class="dayhrow"><h2 class="dayh">${DIAS[d]}, ${fmtBR(addDays(S.week,d))}</h2>${temDia?`<button class="btn ${cd?'danger':'ghost'} small" data-act="clearDay" data-d="${d}">${cd?'Toque para confirmar':'Limpar dia'}</button>`:''}</div>${cards}
   ${esp.length?`<p class="foot">Refeições especiais na semana: ${esp.map(x=>`${nomeDe(x.w)} ${x.n} de ${lim}`).join(' · ')}${esp.some(x=>x.n>lim)?'. O plano permite até 2 por semana.':''}</p>`:''}`;
 }
 function sheetOpt(sh){
@@ -806,19 +839,27 @@ function sheetSubs(sh){
 function chk(on,act,a,label){return `<button class="chk ${on?'on':''}" role="checkbox" aria-checked="${on}" aria-label="${esc(label)}" data-act="${act}" ${attrs(a)}><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>`}
 function viewShop(){
   const D=derive(),buy=D.rows.filter(r=>r.status==='buy'),got=D.rows.filter(r=>r.status==='bought'),ok=D.rows.filter(r=>r.status==='enough');
+  const manPend=D.manual.filter(x=>!x.done),manDone=D.manual.filter(x=>x.done);
   const row=r=>`<li class="row ${r.status==='bought'?'done':''}">${chk(r.status==='bought','buyToggle',{key:r.key},r.nome)}
-   <div class="rt"><b>${esc(r.nome)}</b><small>precisa ${fmtQty(r.q,r.u)} · estoque ${fmtQty(r.base,r.u)}</small></div>
+   <div class="rt"><b>${esc(r.nome)}</b><small>precisa ${fmtQty(r.q,r.u)} · estoque ${fmtQty(r.est,r.u)}</small></div>
    <span class="qty">${fmtQty(r.status==='bought'?r.bought:(r.bought>0?r.falta:r.toBuy),r.u)}</span></li>`;
-  const man=D.manual.map(x=>`<li class="row ${x.done?'done':''}">${chk(x.done,'manualToggle',{id:x.id},x.nome)}<div class="rt"><b>${esc(x.nome)}</b><small>adicionado à mão</small></div><span class="qty">${fmtQty(x.q,x.u)}</span><button class="x" aria-label="Remover ${esc(x.nome)}" data-act="manualDel" data-id="${x.id}">×</button></li>`).join('');
+  const manRow=x=>`<li class="row ${x.done?'done':''}">${chk(x.done,'manualToggle',{id:x.id},x.nome)}<div class="rt"><b>${esc(x.nome)}</b><small>adicionado à mão</small></div><span class="qty">${fmtQty(x.q,x.u)}</span><button class="x" aria-label="Remover ${esc(x.nome)}" data-act="manualDel" data-id="${x.id}">×</button></li>`;
+  const man=manPend.map(manRow).join('');
+  const nGot=got.length+manDone.length;
   const vazio=!D.rows.length&&!D.manual.length;
+  const todoFeito=!vazio&&!buy.length&&!manPend.length;
+  const pw=plannedWeeks().filter(x=>Object.keys(x.doc||{}).some(k=>k[0]==='s'));
+  const de=pw.length?fmtBR(pw[0].w):fmtBR(weekStartOf(new Date()));
   const vsel=`<div class="seg vsel" role="group" aria-label="Visão da lista">${[['casal','Casal'],['c','Carol'],['j','Júlio']].map(([v,l])=>`<button class="${S.shopView===v?'on':''}" data-act="shopView" data-v="${v}">${l}</button>`).join('')}</div>`;
-  return `${weekBar()}${vsel}
-  <div class="summary card"><div><b>${buy.length}</b><span>para comprar</span></div><div><b>${D.cook}</b><span>para cozinhar</span></div><div><b>${D.order}</b><span>para pedir</span></div></div>
+  return `<h2 class="title">Compras</h2><p class="muted">Soma de tudo que está planejado a partir da semana de ${de}${pw.length>1?` (${pw.length} semanas)`:''}.</p>${vsel}
+  <div class="summary card"><div><b>${buy.length+manPend.length}</b><span>para comprar</span></div><div><b>${D.cook}</b><span>para cozinhar</span></div><div><b>${D.order}</b><span>para pedir</span></div></div>
   <button class="btn primary wide" data-act="addBuyOpen">+ Adicionar item</button>
   ${vazio?'<div class="empty card"><b>Nenhum ingrediente ainda</b><p>Escolha refeições em Planejar e marque como Cozinhar. A lista é montada por ingrediente.</p></div>':''}
+  ${todoFeito?'<div class="empty card"><b>Tudo comprado</b><p>Não falta nada para o que está planejado.</p></div>':''}
   ${buy.length?`<h3 class="sec">Para comprar</h3><ul class="list card">${buy.map(row).join('')}</ul>`:''}
   ${man?`<h3 class="sec">Adicionados à mão</h3><ul class="list card">${man}</ul>`:''}
-  ${got.length?`<h3 class="sec">Comprados</h3><ul class="list card">${got.map(row).join('')}</ul>`:''}
+  ${nGot?`<button class="link" data-act="showBought">${S.showBought?'Esconder comprados':`Mostrar comprados (${nGot})`}</button>`:''}
+  ${S.showBought&&nGot?`<h3 class="sec">Comprados</h3><ul class="list card">${got.map(row).join('')}${manDone.map(manRow).join('')}</ul>`:''}
   ${ok.length?`<details class="card okbox"><summary>${ok.length} ${ok.length===1?'item com estoque suficiente':'itens com estoque suficiente'}</summary><ul class="list">${ok.map(r=>`<li class="row"><span class="tick">✓</span><div class="rt"><b>${esc(r.nome)}</b><small>precisa ${fmtQty(r.q,r.u)} · estoque ${fmtQty(r.est,r.u)}</small></div></li>`).join('')}</ul></details>`:''}
   <p class="foot">${S.shopView==='casal'?'Lista do casal: soma o que Carol e Júlio vão cozinhar.':`Visão só de ${nomeDe(S.shopView)}: mostra apenas o que ${nomeDe(S.shopView)} vai cozinhar. Estoque e compras marcadas continuam compartilhados.`} Quantidades em gramas, mililitros ou unidades, como no plano (alimentos já preparados, por exemplo arroz cozido). Salada, momento doce e refeição especial não entram sozinhos: use + Adicionar item.</p>`;
 }
